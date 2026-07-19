@@ -37,6 +37,9 @@
     font-family:var(--mono);font-size:10px;padding:6px 8px;cursor:pointer}
   .addbtn{width:100%;padding:15px;border:1px dashed var(--edge);border-radius:14px;background:transparent;
     color:var(--cream);font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;margin-top:2px}
+  .synbtn{flex:1;padding:9px;border:1px solid var(--edge);border-radius:10px;background:transparent;
+    color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer}
+  .synbtn:hover{color:var(--cream);border-color:var(--amber)}
   .hometip{font-size:11.5px;color:var(--muted);line-height:1.7;padding:14px 18px 20px}
   .hometip code{font-family:var(--mono);color:var(--amber)}
   /* study card */
@@ -107,6 +110,10 @@
   </header>
   <div class="list" id="deck-list"></div>
   <div style="padding:0 16px"><button class="addbtn" id="add-deck">＋ デッキを追加</button></div>
+  <div style="padding:10px 16px 0;display:flex;gap:10px;align-items:center">
+    <button class="synbtn" id="sync-now" style="flex:0 0 auto;padding:9px 14px">今すぐ同期</button>
+    <span id="sync-status" style="font-size:11px;color:var(--muted)">…</span>
+  </div>
   <div class="hometip">スプレッドシートの <code>B列=問題 / C列=答え</code>（先頭の <code>A列=ジャンル</code> でデッキ分け、任意の <code>D列=カテゴリ</code>）をコピーして貼り付けるか、公開CSVのURLを指定すればデッキになります。編集したらURL再読込で反映。</div>
 </section>
 
@@ -425,6 +432,7 @@ async function loadAll(){
   }
   renderHome();
   autoSyncAll();
+  cloudSync();
 }
 /* 起動時：URL登録デッキを静かに最新化（失敗は無視） */
 async function autoSyncAll(){
@@ -518,9 +526,10 @@ function reveal(){
 function grade(ok){
   if(phase!=="a"||!cur._card)return;
   const c=cur._card,s={...st(c.id)};delete s.new;
+  s.t=Date.now();
   if(ok){s.box=Math.min(5,s.box+1);s.due=addDays(today(),INT[s.box]);queue.shift();}
   else{s.box=1;s.due=today();queue.push(queue.shift());}
-  progress[c.id]=s;saveProgress();next();
+  progress[c.id]=s;saveProgress();scheduleCloudPush();next();
 }
 
 /* ---- add / sync decks ---- */
@@ -600,6 +609,50 @@ document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{
   document.getElementById("paste-field").classList.toggle("hidden",addMode!=="paste");
   document.getElementById("url-field").classList.toggle("hidden",addMode!=="url");});
 document.getElementById("modal").addEventListener("click",e=>{if(e.target.id==="modal")openModal(false);});
+
+/* ---- 自動クラウド同期（Supabase・一人利用）---- */
+const SB_URL="https://ueghapzawzvyyfnvkgjw.supabase.co";
+const SB_KEY="sb_publishable_-J5MBSNqS9KtMGm7MOgAQg_XtBnQTE1";
+const SYNC_ID="ganmodoki1";
+const SB_HEAD={"apikey":SB_KEY,"Authorization":"Bearer "+SB_KEY,"Content-Type":"application/json"};
+function setSyncStatus(t){const el=document.getElementById("sync-status");if(el)el.textContent=t;}
+function nowhm(){const d=new Date();return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");}
+function mergeInto(base,incoming){ // 各カード、tが新しい方を採用
+  let n=0;for(const id in incoming){const a=base[id],b=incoming[id];
+    if(!a||(((b&&b.t)||0)>((a&&a.t)||0))){base[id]=b;n++;}}return n;}
+async function cloudPull(){
+  const url=SB_URL+"/rest/v1/study_progress?id=eq."+encodeURIComponent(SYNC_ID)+"&select=data";
+  const r=await fetch(url,{headers:SB_HEAD,cache:"no-store"});
+  if(!r.ok)throw new Error("pull "+r.status);
+  const rows=await r.json();return (rows&&rows[0]&&rows[0].data)||null;
+}
+async function cloudPush(obj){
+  const url=SB_URL+"/rest/v1/study_progress?on_conflict=id";
+  const body=[{id:SYNC_ID,data:obj,updated_at:new Date().toISOString()}];
+  const r=await fetch(url,{method:"POST",headers:{...SB_HEAD,"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify(body)});
+  if(!r.ok)throw new Error("push "+r.status);
+}
+let syncing=false,pushTimer=null;
+async function cloudSync(){
+  if(syncing)return;syncing=true;setSyncStatus("同期中…");
+  try{
+    const remote=await cloudPull();
+    if(remote)mergeInto(progress,remote);
+    await saveProgress();
+    await cloudPush(progress);
+    renderHome();
+    setSyncStatus("☁ 同期済み "+nowhm());
+  }catch(e){setSyncStatus("⚠ 同期できません（オフライン等）");}
+  syncing=false;
+}
+function scheduleCloudPush(){ // 採点のたびに呼ぶ→まとめて遅延送信
+  clearTimeout(pushTimer);
+  pushTimer=setTimeout(async()=>{
+    try{await cloudPush(progress);setSyncStatus("☁ 同期済み "+nowhm());}
+    catch(e){setSyncStatus("⚠ 未同期（次の同期で再送）");}
+  },2000);
+}
+document.getElementById("sync-now").onclick=cloudSync;
 document.addEventListener("keydown",e=>{
   if(document.getElementById("modal").classList.contains("open"))return;
   if(!document.getElementById("study").classList.contains("active"))return;
