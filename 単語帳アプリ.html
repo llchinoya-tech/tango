@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>単語帳 — Field Notebook</title>
+<style>
+  :root{--bg:#14110f;--panel:#1e1a17;--panel2:#241f1b;--edge:#3a322c;--cream:#ede6da;
+    --muted:#9a8e7f;--amber:#e0a75e;--red:#e4574c;--green:#7ba35a;
+    --shadow:0 18px 40px rgba(0,0,0,.55);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP","Segoe UI",sans-serif;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--cream);font-family:var(--sans);-webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;min-height:100dvh;overflow:hidden;
+    padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  .screen{flex:1;display:none;flex-direction:column;min-height:0}
+  .screen.active{display:flex}
+  /* header */
+  header{display:flex;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid var(--edge)}
+  header .back{font-size:20px;color:var(--muted);background:none;border:none;cursor:pointer;padding:4px 4px 4px 0;line-height:1}
+  header h1{font-size:14px;letter-spacing:.12em;font-weight:800;text-transform:uppercase;margin:0}
+  header .jp{font-size:11px;color:var(--muted);letter-spacing:.06em}
+  header .right{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted)}
+  header .right b{color:var(--amber)}
+  /* home deck list */
+  .list{overflow:auto;padding:14px 16px 8px;flex:1}
+  .deck{display:flex;align-items:center;gap:12px;padding:16px;margin-bottom:11px;border:1px solid var(--edge);
+    border-radius:15px;background:var(--panel);cursor:pointer;transition:.15s}
+  .deck:active{background:var(--panel2)}
+  .deck .body{flex:1;min-width:0}
+  .deck .name{font-size:16px;font-weight:800;letter-spacing:.01em;margin-bottom:5px}
+  .deck .meta{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.04em}
+  .deck .meta b.due{color:var(--amber)} .deck .meta b.done{color:var(--green)}
+  .deck .go{color:var(--muted);font-size:20px}
+  .deck .tool{background:none;border:1px solid var(--edge);border-radius:8px;color:var(--muted);
+    font-family:var(--mono);font-size:10px;padding:6px 8px;cursor:pointer}
+  .addbtn{width:100%;padding:15px;border:1px dashed var(--edge);border-radius:14px;background:transparent;
+    color:var(--cream);font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;margin-top:2px}
+  .hometip{font-size:11.5px;color:var(--muted);line-height:1.7;padding:14px 18px 20px}
+  .hometip code{font-family:var(--mono);color:var(--amber)}
+  /* study card */
+  .stage{flex:1;display:flex;flex-direction:column;justify-content:center;padding:14px 18px;min-height:0;cursor:pointer}
+  .card{position:relative;border:1px solid var(--edge);border-radius:18px;
+    background:radial-gradient(120% 90% at 50% -10%,rgba(224,167,94,.06),transparent 60%),var(--panel);
+    box-shadow:var(--shadow);padding:22px;display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;max-height:64vh}
+  .card::before,.card::after{content:"";position:absolute;width:24px;height:24px;pointer-events:none}
+  .card::before{top:12px;left:12px;border-top:2px solid var(--amber);border-left:2px solid var(--amber);opacity:.65}
+  .card::after{bottom:12px;right:12px;border-bottom:2px solid var(--amber);border-right:2px solid var(--amber);opacity:.65}
+  .databar{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--muted);
+    display:flex;justify-content:space-between;margin-bottom:14px}
+  .databar .cat{color:var(--amber)} .databar i{color:var(--cream);font-style:normal}
+  .q{font-size:21px;line-height:1.55;font-weight:800;letter-spacing:.01em}
+  .qwrap{display:flex;align-items:center;flex:1;min-height:0;overflow:auto}
+  .ans{border-top:1px dashed var(--edge);margin-top:16px;padding-top:16px;overflow:auto;
+    font-size:16.5px;line-height:1.72;font-weight:500;color:var(--cream)}
+  .ans.hidden{display:none}
+  .tap-hint{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.08em;text-align:center;padding-top:14px}
+  /* bottom bar */
+  .bar{padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--edge)}
+  .reveal{width:100%;padding:17px;border-radius:14px;border:1px solid var(--edge);background:var(--panel);
+    color:var(--cream);font-family:var(--sans);font-size:15px;font-weight:800;letter-spacing:.05em;cursor:pointer}
+  .grade{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .grade button{padding:19px 8px;border-radius:15px;border:1px solid var(--edge);font-family:var(--sans);
+    font-size:17px;font-weight:800;letter-spacing:.06em;cursor:pointer;color:var(--cream);background:var(--panel)}
+  .grade .ng{border-color:rgba(228,87,76,.55);background:rgba(228,87,76,.10)}
+  .grade .ng:active{background:rgba(228,87,76,.22)}
+  .grade .ok{border-color:rgba(123,163,90,.55);background:rgba(123,163,90,.10)}
+  .grade .ok:active{background:rgba(123,163,90,.22)}
+  .grade .sub{display:block;font-family:var(--mono);font-size:10px;color:var(--muted);font-weight:500;margin-top:4px;letter-spacing:.04em}
+  .hidden{display:none!important}
+  /* empty */
+  .empty{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:16px;text-align:center;padding:30px;color:var(--muted)}
+  .empty h2{color:var(--cream);font-size:19px;margin:0}
+  .empty p{margin:0;font-size:14px;line-height:1.6}
+  .empty button{font-family:var(--mono);font-size:12px;padding:12px 18px;border:1px solid var(--edge);
+    border-radius:12px;background:transparent;color:var(--cream);cursor:pointer}
+  /* modal */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.62);display:none;align-items:flex-end;z-index:30}
+  .modal.open{display:flex}
+  .sheet{background:var(--panel);border-top:1px solid var(--edge);border-radius:20px 20px 0 0;width:100%;
+    max-height:90dvh;overflow:auto;padding:22px 20px calc(24px + env(safe-area-inset-bottom));box-shadow:var(--shadow)}
+  .sheet h3{margin:0 0 4px;font-size:16px}
+  .sheet p{margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.7}
+  .sheet p code{font-family:var(--mono);color:var(--amber);font-size:11px}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.06em}
+  input[type=text],textarea{width:100%;background:var(--bg);color:var(--cream);border:1px solid var(--edge);
+    border-radius:11px;padding:12px;font-family:var(--mono);font-size:12.5px;line-height:1.6}
+  textarea{min-height:120px;resize:vertical}
+  .seg{display:flex;gap:8px;margin-bottom:12px}
+  .seg button{flex:1;padding:10px;border:1px solid var(--edge);border-radius:10px;background:transparent;
+    color:var(--muted);font-family:var(--mono);font-size:12px;cursor:pointer}
+  .seg button[aria-pressed=true]{background:var(--cream);color:var(--bg);font-weight:700;border-color:var(--cream)}
+  .row{display:flex;gap:10px;margin-top:6px}
+  .row button{flex:1;padding:14px;border-radius:12px;border:1px solid var(--edge);font-weight:800;font-size:14px;cursor:pointer;background:var(--panel2);color:var(--cream)}
+  .row .primary{background:var(--cream);color:var(--bg);border-color:var(--cream)}
+  .msg{font-size:12px;color:var(--green);margin-top:10px;min-height:16px;font-family:var(--mono)}
+  .msg.err{color:var(--red)}
+</style></head><body>
+
+<!-- HOME -->
+<section class="screen active" id="home">
+  <header>
+    <div><h1>Field Notebook</h1><div class="jp">単語帳・間隔反復</div></div>
+    <div class="right" id="home-total"></div>
+  </header>
+  <div class="list" id="deck-list"></div>
+  <div style="padding:0 16px"><button class="addbtn" id="add-deck">＋ デッキを追加</button></div>
+  <div class="hometip">スプレッドシートの <code>B列=問題 / C列=答え</code>（先頭の <code>A列=ジャンル</code> でデッキ分け、任意の <code>D列=カテゴリ</code>）をコピーして貼り付けるか、公開CSVのURLを指定すればデッキになります。編集したらURL再読込で反映。</div>
+</section>
+
+<!-- STUDY -->
+<section class="screen" id="study">
+  <header>
+    <button class="back" id="s-back">‹</button>
+    <div><h1 id="s-name">DECK</h1><div class="jp" id="s-cat">—</div></div>
+    <div class="right">残り <b id="s-left">0</b></div>
+  </header>
+  <div class="stage" id="stage">
+    <div class="card" id="card">
+      <div class="databar"><span class="cat" id="c-cat">—</span><span>BOX <i id="c-box">1</i></span></div>
+      <div class="qwrap"><div class="q" id="c-q"></div></div>
+      <div class="ans hidden" id="c-a"></div>
+      <div class="tap-hint" id="c-hint">タップで答えを表示</div>
+    </div>
+    <div class="empty hidden" id="empty">
+      <h2>今日の分は完了 🎞</h2>
+      <p>このデッキで今日出す期限のカードはありません。</p>
+      <button id="cram">期限を無視して全部復習</button>
+    </div>
+  </div>
+  <div class="bar" id="bar">
+    <button class="reveal" id="reveal">答えを見る</button>
+    <div class="grade hidden" id="grade">
+      <button class="ng" id="ng">もう一度<span class="sub">今日また出す</span></button>
+      <button class="ok" id="ok">覚えた<span class="sub">間隔を延ばす</span></button>
+    </div>
+  </div>
+</section>
+
+<!-- ADD MODAL -->
+<div class="modal" id="modal"><div class="sheet">
+  <h3>デッキを追加</h3>
+  <p>Googleスプレッドシートの行を選択してコピー→貼り付け。<br>
+     <code>ジャンル / 問題 / 答え / カテゴリ / 日付</code> の並びなら、ジャンルごとに自動でデッキ分けします。<br>
+     <code>問題 / 答え</code> の2列だけなら、下の「デッキ名」を使います。</p>
+  <div class="seg"><button data-m="paste" aria-pressed="true">貼り付け</button><button data-m="url" aria-pressed="false">CSVのURL</button></div>
+  <div class="field"><label>デッキ名（2列貼り付け・URL用）</label><input type="text" id="d-name" placeholder="例）カメラ転売 / 簿記3級 / 運送業"></div>
+  <div class="field" id="paste-field"><label>貼り付け（タブ・カンマ区切り）</label><textarea id="d-paste" placeholder="カメラ転売	BCエラーとは？	接点不良。叩くと直る…	顧客対応"></textarea></div>
+  <div class="field hidden" id="url-field"><label>公開CSVのURL（ファイル→共有→ウェブに公開→CSV）</label><input type="text" id="d-url" placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?output=csv"></div>
+  <div class="msg" id="d-msg"></div>
+  <div class="row"><button id="d-cancel">閉じる</button><button class="primary" id="d-add">追加する</button></div>
+</div></div>
+
+<script>
+/* ===== built-in deck ===== */
+const BUILTIN=`FIX|2024-07|Canon EOS系で出る「BCエラー」の正体と対処は？|接点不良の持病。軽症は電池ON状態で接点部を叩くと直ることが多い。重症は分解しても一時的なので、直後は数日手元で様子見してから販売。接点は消しゴムや接点復活材で磨くのも有効。（EOS-1 / 3 / 5）
+FIX|2024-06|Canon EFレンズでエラーが出て撮影不可のとき、基本対応は？|稀にあるエラー個体。端子清掃をしても直らないことが多く、その場合は返品が基本。
+FIX||AFレンズのAFが動かないときの最初の一手は？|接点を綿棒＋アルコールでそっと拭く。改善しなければ輸送振動で壊れた扱いで返品。
+FIX||ミラーが戻らない・滑る「ミラースリップ」の簡易対処は？（例:Yashica FX-3 Super 2000）|ドライヤーで温める→ミラーをずらす→冷やす、で一時的に回復。再発するので返金／返品前提。バイヤーに動画を送り自分で直させる手もある。
+FIX||絞り羽が固着して動かないレンズの対処は？（例:Mamiya Sekor C 45mm f2.8）|洗浄すると動くようになる。
+FIX||シャッター幕が最後まで戻らないときに試すことは？|指でずらすと治ることがある。
+FIX||Mamiya M645系のチャージクランクが外れて付け直せないときは？|逆方向に何度か回すと外せる／付け直せる。
+FIX||中判ボディ（ボディのみ）の検品が実は簡単な理由は？|ミラー・幕はチャージすれば戻る＝正常。シャッター速度系の故障も少なく、検品箇所がほぼ無い。
+FIX||ミラーアップ異常か操作ミスかを見分ける診断法は？|レンズを外し、マウント側からミラーを撮った動画をもらうと判別できる。
+FIX||露出計が動かない電子シャッター機で疑う内部要因は？|配線の半田欠落で通電していないことがある。露出計はズレやすくクレームの元。
+FIX||Canon 5D Mark IIIの表示エラーの解決法は？|メニューの「トリミング情報表示」をOFFにする。
+MISS||Mamiya 7IIで「シャッター切れず電源も入らない」とき、故障の前に疑うことは？|電池の種類間違い。正しくは4SR44。4LR44（＝LR44×4個）と誤解されやすい。
+MISS||Contax Gレンズで「絞り値がズレて壊れている」と言われたら？|レンズ単体では絞り値がズレて見えるが、ボディに装着すると正常になる設計。故障ではない。
+MISS||Nikon Dシリーズの検品で「EE」表示が出たら？|絞りリングをF22（最小絞り）にロックすれば解消することが多い。
+CHK||曇りやすい貼り合わせレンズ（広角/Mamiya/Contax等）で警戒すべき偽装は？|中玉抜き（バル切れ隠し）。外観で分からずフォーカスで発覚。高額はフォーカスまで検品し、妙に綺麗な個体は要注意。
+CHK||Nikon FAで検品項目に入れるべき経年症状は？|フレームカウンターがS/0に戻らない・途中で止まる。
+CHK||Nikon Micro 55mm f2.8で多い個体不良は？|ピントリングの固着で回らない。
+CHK||ブロニカのレンズで多い状態は？|薄曇りが多い。
+CHK||Rolleiflex 2.8F/2.8Eで返品を防ぐ確認は？|シリアルで型番違いを確認（2.8Fと売って実は2.8Eだった例あり）。
+CHK||Canon FD 24mm f2.8 S.S.Cで出やすい状態と判断基準は？|カビが出やすい。点カビ程度ならOK、酷いのは避ける。
+CHK||コンパクト機の検品はどこまでやるべき？|フィルム未装填では正常でも、装填すると不具合が出る機種がある。フィルム装填まで確認。
+CHK||Contax T2など距離計/レンズ収納機で不具合を招く操作は？|レンズ収納の御作法を無視した開閉。距離計は油で固着し、清掃後に再び粘ることも。
+CHK||返品を減らす検品・出品の基本は？|基本検品を徹底し、試写できない前提を説明文に明記、グレード表記は保守的に付ける。
+SELL||小資金・回転重視の筆頭機種と実績は？|Olympus AF-1（簡易防水, Zuiko 35mm/2.8）。1,100円→即売れ、利益率83%。故障少・検品簡単。
+SELL||誰でも売れる定番の二眼／RF機は？|Yashica 124G（TLR二眼）、Yashica Electro 35 GSN（GSNは利益率58%クラス）。
+SELL|2024|Minolta SRT101の利益実績例は？|メルカリ2,800円→$88、利益率67%。
+SELL||Canonの定番SLRで安定して値がつく機種は？|A-1 / T90 / AE-1 Program。AE-1 Programは遺品整理でも一番値がつく。
+SELL|2023-09|Pentax 50mm f1.7 SMC-M(K)の実績は？|2,200円→$59、利益率63%。
+SELL|2023-12|Canon New FDズーム/単焦点の位置づけは？|安定した回転商材（定型報告で平均利益率27%）。例:35-105 Macro 4,000円→$120、利益率65%。
+SELL|2024-07|認知度が低く狙い目のHasselblad年代とアピール点は？|503CWのAcute Matte D装備年代。ISO3200対応をアピールすると高値。
+SELL|2024-02|Contax Zeiss PC-Distagon 35mm f2.8 Shiftの相場感は？|$1,299で即日級。Contax Zeiss系は平均利益率42%。
+SELL|2024|Olympus OM Zuiko 21mm f2の実績と注意は？|8万→$2,599、利益25万（利益率67%）。相場が下がりやすく早売り。
+SELL|2024|女性・ファッション層に人気の高額コンパクトは？|Contax T2/T3（Leica M6/M7と並ぶ$1,000+の定番高額）。
+SELL|2024-06|動かないボディでも売る方法と機種例は？|For Partsで出品。不動のPentax LX、Canon NEW F-1等が$99前後で売れる。部品取り需要が多く、eBayで売れば還付金も確保。
+MKT|2023-12|相場が大きく下落した要注意カテゴリは？|Canon FD S.S.C系、Olympus OM広角系、Olympus 40mm f2。高額品ほど「仕入れたら早く売る」が鉄則。
+MKT|2024|よく売れる販売先の国は？|オーストラリア（AU）。US本体でも高額品は動く。
+MKT|2024|「販売数が少ない機種＝ダメ」ではない理由は？|数が一桁でも回転が早い機種がある（一時期のLeica R、Mamiya645 super/pro）。商品別の回転率で見る。
+MKT||ジャンク仕入れで強気に攻められる根拠は？|ジャンク処理でも8割程度は回収できる。パーツ毎に価値を計算して入札。
+MKT||清掃しても価値が上がらないカビの見極めは？|コーティング劣化由来のカビ痕は清掃しても残り、MINTにならず売れ残る→酷い個体は見送り。
+MKT||高額カメラ仕入れ時に見落としがちな収益は？|消費税還付（輸出免税）。例:Leica M6を22.8万仕入→還付約2万円。利益計算に織り込む。
+CS||クレーム対応をパターン化する基本の型は？|①相手の要望を早く理解 ②自分の着地点を先に決める ③要望が範囲内なら即解決／範囲外なら交渉／無理なら返品。事前に一部返金・返品の基準を作ると相手主導にならない。
+CS||グレードの主観差（near mint等）でクレームが来たときの割り切り方は？|主観差は平行線で時間の無駄。「がっかりさせて心苦しい。お詫びに半額相当を返金する用意があります」と先に提示して早期解決。フィードバック獲得の機会と捉える。
+CS||光漏れ等の不具合クレーム（例:Mamiya RB67）への返答は？|「全カメラの試写までは出来ない。ライトシールのメンテは可能。メンテ代$30返金でどう？返品したいなら受け付ける」と選択肢を提示。
+CS||バイヤーが「Fedexだと高い税金、他の発送方法は？」と聞いてきたら？|遠回しなアンダーバリュー要求。「税金はあなたの国のルール、関税では助けられない」とはっきり断る。こう言うバイヤーは後でトラブルになる確率が高い。
+CS||アンダーバリュー（過少申告）を頼まれたら？|最近は税関も厳しく非推奨。断るのが基本。
+CS|2023-09|香港宛て発送で警戒すべき詐欺の手口は？|payment dispute悪用。配達完了後「注文品と違う」とケースを開き返金要請＆商品も返さない。高額デジカメ(特にFujifilm)は香港除外、怪しいバイヤーはブロック。
+CS||ネガティブ／ニュートラル評価への基本認識は？|要注意。SEO・売上に響くので、付きそうな取引は先回りの返金交渉で防ぐ。
+CS||発送後のバイヤーフォローはどこまで？|追跡番号を送ったら基本終了（送りっぱ）でも回る。フィードバック催促は効果が薄くクレームの火種にもなり得る。
+CS||配送で「戻ってきた／届かない」と言われたらまず何をする？|自分で追跡を調査（返送ラベルの有無・返送倉庫への移動を確認）してから対応を決める。高額品は署名配送に。
+CS||戻ってきた品が別物／破損だったときの回収手段は？|発送時と状態が異なれば返金取消をeBayジャパンに打診。宣言供述書サインで販売額を回収できた例あり。ダメならヤフオクでジャンク出品。
+CS||バイヤーから関税分の上乗せ返金を求められたら？|商品全額を超える返金はeBay上できない。「関税は各国ルールで助けられない」で通す。返品を受ければ問題なし。
+OPS|2023-04|eBayの売上の「波」とその乗り方は？|1ヶ月の中で売れる波が来る。撒き餌(すぐ売れる安い商品)で1つ売ると連鎖しやすい。波が来たら基本(出品数30以下は1日1出品、6日で再出品)を回す。
+OPS||初心者が「急に売れなくなる」典型パターンは？|少し売れてきたところで利益欲しさに価格を上げる→パタッと売れなくなる。上位表示が買われる条件なので値上げは慎重に。
+OPS||再出品はなぜ重要？|検索で上位表示されることが買われる条件。定期的な再出品でSEO・露出を保つ。
+OPS|2023-10|出品数とSEO・売上の関係は？|出品数を増やすとSEOが上がり反応が増える。逆に高額品購入で仕入れをセーブし新規出品が滞るとSEOが下がり失速する。
+OPS||タイトルに他社商標を入れる危険は？|VeRO違反で削除警告→強制削除。取り下げてもUnsoldに旧ページが残ると再警告。強制削除でSEOが落ち売上激減（例:Fujifilmに Polaroid）。
+SRC||ヤフオクのローリスク／ハイリスク仕入れの違いと狙い目は？|ローリスク=評価高い/動作確認済/カビ曇りなし。ハイリスク=動作未確認/説明不明瞭だがライバルが減る。ハイリスクを取りに行くと勝ちやすい。
+SRC||「動作未確認」ジャンクの勝率を上げる方法は？|クセの分かる出品者から買う(一度買って本当にジャンクか確認)、他の出品説明と見比べる、ストア出品を選ぶ、転売ヤー感のある人は避ける。
+SRC||タダ同然でカメラを仕入れられる特殊ルートは？|遺品整理・生前整理業者。カメラは価値が分からず捨てていることが多く、譲ってもらえる。
+SRC||店舗仕入れを伸ばすコツは？|キタムラ・ハードオフ等を開拓。迷ったら先輩に電話相談して無謀な仕入れを避ける。代行会社へ直送して出品までを時短。
+SRC||リサーチが進まないときの意識の向け方は？|全工程を一度に考えない。今はリサーチだけ、と1タスクに集中。件数と精度を上げれば仕入れは後からどうにでもなる。
+SRC||古物商許可の申請のコツは？|管轄警察で対応はまちまち。担当者に必要書類・書き方・記入漏れを確認してから提出。虚偽なく反社でなければ通る。
+SHIP|2023-02|EU向け発送でラベルに必須の記載は？|HSコード。記載しないと通関遅延の恐れ。US向けも書いた方が通関がスムーズ。
+SHIP|2023-10|HSコードとは？|輸出入で商品を分類する番号。関税率等の判定に使う。代行(オークレボ)はカメラ/レンズはプルダウン、その他は6桁を入力。
+SHIP||発送日数の約束はしてよい？|EU方面は日数がまちまち。「すぐ発送するが到着日は約束できない」と伝え、確約しない。
+SHIP||高額品の発送で必須の設定は？|署名(サイン)配送。不在返送・紛失トラブル時に自分を守れる。
+CHK|2023-10|MINOLTAの「緑のロッコール」とは？清掃時の注意は？|1950年代後半開発のアクロマチックコーティング(AC)で緑の光彩を放つ。MC→MD→New MDと年代でACの面数が減り最終的に廃止。分解清掃でコーティングを傷つけやすいので要注意。シリーズ確認が必須。
+CHK|2024-02|Leicaレンズを清掃するときの注意点は？|無水エタノールで刻印(文字部分)が取れてしまうことがある。文字部分に付けないよう気をつける。ユーロ圏メーカー全般で注意。
+CHK|2024-01|Olympus等のカビ痕は清掃で消える？|コーティング劣化由来のカビ痕は残りやすく、Olympusに限らずカビ痕は残るものと認識しておく。酷い個体は見送り。
+FIX|2024-05|Canon A-1/AE-1系で「電池を入れてもシャッターが切れない」持病は？|A系の持病。シャッターリリース機構の劣化(シャッター鳴きに関連)が原因で、修理可能(1〜2万円)。返品より修理提案も有効。
+CHK|2024-06|Canon EFレンズ(AF)で注意すべき持病は？|AFが壊れやすい。仕入れ時に必ずAF動作を確認。修理業者もEFのAFは対応外のこと(カビ取りのみ等)が多く、壊れると返品になりがち。
+SELL|2024-07|Hasselblad 503CWを高く売るコツは？|Acute Matte D装備年代はISO最大4000対応。ISO3200を写真で見えるようにしてアピールすると高値。認知度が低く狙い目。
+CHK|2024-07|返品で発覚しやすい「中玉抜き」の対象レンズは？|曇りやすい貼り合わせレンズ(広角・Mamiya・Contax等)。バル切れ隠しに中玉が抜かれ、フォーカスが合わないで発覚。ヤフオク仕入れで実例多数。
+CHK|2024-11|Canon 旧F-1で出品前に確認することは？|前期・後期で違いがあり見分け方がある。型番違いは返品要因になるので確認して記載。
+CHK|2025-01|Konica IIIの検品ポイントは？|モルト(遮光材)の劣化。張替が必要なことが多い。
+CHK|2025-02|レンジファインダー(Leica等)の「二重像」の検品とは？|距離計の二重像が合致するか、特に無限遠で確認する。ズレていれば距離計不良。
+CHK|2025-02|Canon EOS-1Vで多い持病は？|露出計の不具合(「M＊8888…」のまま数字が変化しない等)が持病的に多い。検品時に露出計表示を確認。
+CHK|2025-02|ペンタックスの「PKマウント」と「645マウント」の違いは？|PKマウントはKマウントの別名で、645マウントとは全く別物。混同して出品しない。
+OPS|2025-03|Canonの超古いレンズの拭き傷はどう扱う？|細かい拭き傷は多いが、説明に"scuffs"と正直に書いても売れる。
+CHK|2025-03|リコーGR(フィルム)の検品で多い不良は？|フィルムカウンターが欠けていることがとても多い。
+CHK|2025-03|Canon New FDレンズの検品で確認することは？|New FD特有の絞り確認方法がある。出品前に絞り動作を確認する。
+CHK|2025-04|Contax TVSシリーズやT2の設計上の弱点は？|フレックスケーブルが狭いスペースで折り畳まれ、経年で破損しやすい。バイヤーも知っており動作確認を求めてくる。
+CHK|2025-04|中判645レンズの曇りは清掃で取れる？|645の曇りは清掃で綺麗になることが多い。
+CHK|2025-05|Pentax LXの検品で注意する年代差は？|前期モデルは機能不具合が多いとの報告。通電のみ/シャッター不良の個体はFor Partsで$99前後で売れる。
+FIX|2025-07|Canon demi EE17でISOダイヤルが固定(ISO25)される不具合は？|接点不良でISOダイヤルが動かないことがある。スペーサーで接点を触れさせて動くようにした例あり。
+SELL|2025-08|Nikon 28Ti/35Tiの位置づけは？|高級コンパクトの狙い目。相場を覚えておく価値あり。
+SRC|2025-08|効率的なリサーチ手順(watch活用)は？|検索キーワードは短く(例:Nikon 50 1.4)、良さげな物にwatchを付け、後でPCでまとめて確認する。
+CHK|2026-01|Olympus XA/XA4の検品で注意する点は？|露出計の精度が2〜3段ずれている個体があり返品理由になる。露出計の正確性を確認。
+MKT|2026-01|Canon EF Lシリーズの相場は？(直近)|下がったまま戻っていない商品が多い印象。高値期待で高く仕入れない。
+SELL|2026-02|Yashica T4の基礎知識は？|日本名Kyocera Slim T、1990年頃発売の定番高級コンパクト。人気商材。
+CS|2026-02|高単価商品やLeicaのバイヤー傾向は？|神経質な人が多くクレームになりやすい。検品と説明をより丁寧に、グレードは保守的に。
+SELL|2026-05|Konica Hexar AFの訴求ポイントは？|サイレントモード動作確認済み・予防整備(点検/注油/抵抗器交換)済みを訴求すると良い。付属品(純正フラッシュHX-14等)も明記。
+CHK|2026-05|Leica M(M4-2等)の距離計で見る不具合は？|無限遠がズレる不具合がある。無限遠での二重像合致を確認。
+CHK|2026-05|SIGMAレンズの検品で注意する点は？|AF不良が出やすい。AF動作を必ず確認。
+CHK|2026-05|Nikon F4で多い経年不良は？|ファインダー内の液晶漏れが多い機種。検品時に液晶表示を確認。
+CHK|2026-06|Contax T2で有名な持病は？|レンズのポンピング(ガクガク)。フレックスケーブル劣化と並ぶ有名な持病。動作確認必須。
+CHK|2026-06|Canon 7等の古いレンジファインダーでピントが出ないときは？|距離計とレンズの相性でピントが出ないことがある(故障とは限らない)。装着可否と距離計を確認。
+CHK|2024-01|Nikon F3の検品で確認する電装系は？|電池を入れても露出計が動かない/データバックが動かない個体がある。露出計とデータバックの動作を確認。
+SELL|2024-01|fujifilmのデジカメが人気の理由は？|オールドレンズの装着を想定した機能が満載で人気。
+CHK|2025-11|Mamiya 645でシャッター速度確認中にミラーアップして戻らないときは？|ミラーが戻らなくなる個体がある。チャージ操作・電池を確認し、戻らなければ整備対象。
+OPS|2023-12|eBayのキャッシュバックキャンペーンの使い方の注意は？|対象は$300以上、割引は「ちょうど15%」設定が条件(以上でも以下でもダメな場合あり)、自己負担約33%、1取引の割引上限$1000。ファインダー等は対象外。回転に使う。
+OPS|2023-12|eBaymag併用で起きる二重販売を防ぐには？|販売後すぐmag・eBay両方から手動で消去し、両者の出品数が一致しているか毎回確認。それでも稀に起きるので、起きたら即バイヤーに連絡しキャンセル。
+SHIP|2023-12|EU向けで「関税/VATを返金して」と言われたら？|VAT(日本の消費税相当)と関税は別物。150ユーロ超はIOSS対象外で関税はバイヤーが自国税関に返還請求するもの。FedExは立替、返品でも関税は戻らない。セラーは無関係と伝える。
+CS|2023-12|返品時、返金のタイミングは？|先に返金すると品が返ってこないリスク。リターンを上げてもらい、現物が戻って確認してから返金するのが基本。
+CS|2024-01|「悪い評価を書く」等で脅すクレーマーへの対処は？|脅しはeBayのpolicy違反(悪質だとサスペンド対象)。US eBayに早めに相談すればnegativeが付いても消してもらえる。先に報告した方が有利。
+CS|2024-01|eBayへの相談はJapanとUSどちらが早い？|eBayジャパンは権限が限られ結局US eBayに回されることが多い。USへ直接連絡が早い。
+SHIP|2024-01|カメラ発送時に電池は入れる？|電池は入れずに発送(入れるとトラブルになる国がある)。入れる場所・型番・新品電池でのテストを案内。中古は輸送振動で露出計等が稀に壊れることも伝える。
+OPS|2024-02|シリアルすり替え返品を防ぐには？|出品写真にシリアルが分かる写真を載せ、説明文に必ずシリアルを記載。すり替え返品時の証拠になる。
+CS|2024-01|クレームの一部返金は何割にすべき？|一律で決めない。相手の購入履歴から業者か素人かを判断し、何を求めているか探って個別対応する。
+CS|2024-01|返金狙いバイヤーの典型的な手口と対処は？|写真に写りにくい不具合をでっち上げ一部返金を要求してくる。「では返品を、返送ラベルは用意済」と即応すると引き下がることが多い。
+SELL|2024-03|カビ痕のあるレンズの出品グレードは？|黒カビ以外のカビ痕は撮影にほぼ影響しない。「薄いカビ痕あり」と必ず記載した上でNear MINT/EXC+5で強気に付けてよい。
+OPS|2024-04|eBayの出品リミットの育て方は？|最初から高単価ばかりだとリミットオーバーで新規出品できなくなる。$100-300を数売って実績を作る。〆は毎月20日で増枠は20日過ぎに反映されやすい。
+SHIP|2024-05|バイヤーが関税を払わないとどうなる？|FedExのAPAC国際サービス規約により、受取人が未払い/支払い拒否だと最終的に荷送人(セラー)へ振替請求される。立替金は月末締めで請求。
+FIX|2024-04|Sonyデジカメで海外バイヤーが言語/メニューで困ったら？|Sonyは国内・海外向けで言語制限をかけている。解除手順があり、バイヤーに案内すると解決することがある。
+OPS|2024-05|値下げしても売れないときの逆張りは？|MINT級を下げすぎるとMINT価格帯から外れ「安すぎて怪しい」と敬遠される。売れない理由の約8割は価格。適正価格に戻す/上げると売れることがある。
+OPS|2024-05|継続的に売るための3原則は？|①定期的な新規出品(毎日1個売りたいなら週10個補充) ②最低限の再出品 ③早く売りたければ価格を下げる。
+SHIP|2024-03|アンダーバリュー要求の角が立たない断り方は？|「伝票の価格は自動的に記載されるので変更できません」と伝えると大半は了承する。バイヤーは脱税意識より安く買いたいだけのことが多い。
+CS|2024-03|返品を受けるときのラベルの渡し方は？|代行(オークレボ)に返品ラベルを依頼→翌日PDF。基本はラベルだけ送ればOK(電子化でインボイスも読める)。開けない相手用にGoogleドライブでURL共有も有効。
+OPS|2024-06|eBayのService Metrics(返品率)が高いとどうなる？対策は？|「Very high」になると手数料が5%上乗せされる。返品率を下げるため、安い商品でも数を売って販売分母を増やしておく。
+CS|2024-06|「日本で受け取るから10%(消費税)引いて」と言われたら？|免税価格で出している旨を伝え「国内販売なら消費税を納付するので、その分は乗せる。今の免税価格からは引けない」と返す。多くは連絡が途絶える。
+CS|2024-06|バイヤーが関税支払いを拒否して荷物が止まったら？|「関税を払わないと商品を受け取れず、お金も失う」と伝えると支払うことが多い。ダメなら返送→全額返金 or 現地破棄。ブラジル等トラブル国は発送除外。
+SHIP|2024-06|FedExとDHLの署名・保険の違いは？|FedExは署名オプションで受取サインを取れ、価格に応じ自動で保険が付く。DHL(代行扱い)は署名オプションが無く、国により置き配が主体。高額はFedEx署名が安全。
+SHIP|2024-06|DHL発送で関税未払いのときの連絡は？|DHLは代行経由でなくバイヤー/セラーへ直接電話が来ることがある。対応が遅れないよう、知らない番号でも出た方がよい。
+CS|2024-07|セラーに非がないネガ/ディフェクト(州税・強制返送・未着)は消せる？|消せる。日本→米の州税課金、バイヤー都合の受取拒否・強制返送による発送遅延/未着ディフェクト等、セラーに非がなければeBay問い合わせでほぼ即削除される。
+CS|2024-07|返送料を差し引いて返金したいのにディスピュートされたら？|「ディスピュートからは差し引いた返金ができない」と伝えると取り下げてもらえることがある。取り下げ後に差引返金する。
+OPS|2024-07|eBayセラー登録カードにアメックスは使える？|アメックスは買い物には使えるが返金支払いに使えないため、セラー登録用にはVISA/Masterを用意する。
+SHIP|2024-08|発送依頼後にキャンセル(取戻し)はできる？|代行の発送確定(9時)以降は国内にあっても取戻し不可。バイヤーのキャンセル希望も受けられない前提で対応する。
+SRC|2024-08|円高局面で有利な仕入れは？|ヤフオク仕入れ。オークション形式で各入札者がリアルタイムレートを反映するため為替影響が小さい。店舗仕入れは価格が高めで不利になりやすい。
+CS|2024-09|一部返金の金額でごねられたら？|上限を提示し「不服なら返品」を示す。しつこければ「eBayに相談する」と伝えると引き下がることが多い。
+SHIP|2024-08|バイヤー受取拒否の強制返送、送料は割引できる？|自分からFedExへ連絡すれば割引適用できる。放置すると自動で一般料金の返送になるので、強制返送時はFedExへ連絡する。
+OPS|2024-08|eBay手数料の決済エラーでサスペンドを防ぐには？|主因はクレカ枠不足と高額決済エラー。カードを2枚登録するかデビットカードを登録しておくと、仕入れで枠が埋まってもエラーを避けられる。
+OPS|2024-08|バイヤーの注文キャンセル申請はどう扱う？|発送済みとマークされる前ならバイヤーがキャンセル申請でき、承認/拒否はセラー判断。発送確定後は取戻し不可なので早めに判断する。
+OPS|2024-09|VeRO違反を避ける出品カテゴリの工夫は？|新品は扱わず、未開封でも中古品カテゴリで出品する。VeROはネガティブ以上にアカウント制限が重い。
+OPS|2024-09|アカウント不調に早く気づく運用は？|毎日1個は売る運用にすると、数日売れない時に異常(ネガ/Neutral評価)へ気づける。理不尽な評価は削除依頼、回復には追加出品を増やす。
+OPS|2024-09|フリーシッピング(送料込み)の判断は？|販売スピードは上がるが、闇雲だと利益を圧迫し、理不尽返品でフル返金、価格帯によってはバイヤーの関税率も上がる。商品・競合状況で使い分ける。
+OPS|2024-09|eBayの複数アカウント(複垢)運用の注意は？|複垢は可(上限あり)。低評価だとAIに停止されやすいので低価格から、評価を溜めてから本格販売。最初のアカウントはリミット・評価を上げてから。
+SRC|2024-09|専門業者からヤフオク仕入れする際のチェック項目は？|外観に凹み/歪み/目立つ傷なし、光学にカビ/クモリ/バル切れの記載なし(「薄い/わずか」でもNG)、動作が未確認でない(専門業者の未確認はほぼ故障)、評価99.5%以上、状態NEAR MINT以上(EXC+5以下はほぼ利益出ない)。
+SRC|2023-05|仕入れのヒントになるeBay公式のデータは？|eBayセラーポータルの「eBay.com人気検索ワードランキングTop100」。カテゴリ別に検索ワードが見られ、需要のヒントになる。
+OPS|2023-05|自分の出品が売れやすい位置にあるか確認する方法は？|米国はBest Match検索が主流。リサーチは価格順で、出品後はBest Matchで自分の表示位置を確認。総出品50品以下なら必ず1ページ目に出る。
+SRC|2023-05|カメラ転売がブランド転売より始めやすい理由は？|カメラは偽物がなくVeRO/偽物判定のリスクが低い。ブランドは偽物判定でアカウント制限を受けやすい。
+CHK|2023-10|Minolta MC Rokkor 58mm f1.2等の清掃で注意することは？|コーティングがもろく、無水エタノールで溶けて傷だらけ(Exc→As-Is)になることがある。清掃はレンズ用ペーパーで慎重に(キッチンペーパー等は厳禁)。旧レンズは種類により無水エタノールに耐えない。
+CHK|2024-01|マウントアダプター/互換マウントでピントが微妙に合わないのはなぜ？|レンズ自体でなくレンズとボディの組み合わせの問題のことがある(例:Nikon S用レンズをLeica RFに付けると近接・開放でわずかにズレる)。アダプターを替えると結果が変わることも。
+CHK|2024-09|Mamiya 7用レンズ(Nシリーズ 150mm等)を単体検品するときの注意は？|ボディがないと絞り羽が開かない仕様。単体ではシャッター/絞りを確認できないので、仕入れ元の光学記載を参照するしかない。
+CHK|2025-02|Pentax 645の空シャッター検品の注意は？|フィルムバックを外した状態では1/1000・1/60・バルブしか切れない。全速を検証するにはフィルムかボディ後キャップが必要。645N/645NIIは普通に空シャッターが切れる。
+CHK|2025-02|電池式カメラの「動かない」で確認すべき電池の入れ方は？|Nikonはプラスを上、Olympus/Pentaxはプラスを下に装着。本数不足(6本要るのに4本等)の思い込み故障も多い。バイヤーには電池装着から動画確認してもらう。
+CHK|2025-02|ミラーレス用レンズの絞り羽は開/閉どちらが正常？|マウントで異なる。マイクロフォーサーズ用は開いた状態が正常、SonyのE-mount用は閉じた状態が正常。ボディ無しでは判断しづらいので同型の出品画像を参照。
+FIX|2025-02|Contax(RX等)のミラーズレの直し方は？|ミラーは両面テープ止めで経年でズレる。ドライヤーで少しずつ温めてミラーを押し込む(強熱は電子部品破損注意)。楊枝でアロンαを側面に点付けして固定する手も(邪道)。
+CHK|2025-02|Canon EOS-1Vのファインダーのケラレは？|レフ板のズレでファインダーがケラレることがある(特定レンズで顕著)。持病の可能性があり、検品時にファインダーのケラレを確認。
+CHK|2025-02|レンジファインダー(Leica等)の見落としやすい検品は？|シャッタースピード確認時は裏蓋を開けて幕が実際に開くか確認(切れても幕が開かない個体あり)。距離計連動の丸ポッチが粘るものは調整が必要。
+FIX|2024-06|Canon EFレンズのAF不良は修理できる？|AF不良専門の修理業者がある(EFカメラサービス等、Nikonも対応可の場合あり)。一般の修理店はカビ取りのみのことが多い。
+CS|2025-02|MINOLTA/Nikonのバイヤー傾向は？|こだわり派が多く、露出計連動など細かい質問をしてくる→トラブルの元になりやすい。検品・説明を丁寧に、グレードは保守的に。
+OPS|2024-05|MAMIYA 6などモデル特定が難しいカメラの出品は？|細分化が進み特定困難。分からなければ一番近いモデル名で出品し、指摘があれば「タイトル間違えました、でも年代の割に綺麗」等でフォロー。マニア以外はクレームになりにくい。
+SELL|2023-09|薄曇りの高額レンズ(Leica Summicron等)は清掃すべき？|この年代のレンズは清掃で改善しないことが多いが、やってみると綺麗になる場合もある。綺麗な出品が少なければRare表記+動画でMINT出品でき高値になる。
+SRC|2023-10|仕入れ〜出荷の回転を上げるコツは？|綺麗な仕入れ品は即梱包・即日出荷し手元に溜めない(置く時間は無駄)。デジカメは高人気機種だけ仕入れてすぐ売る。帰省を仕入れツアー化し交通費を経費計上する手も。
+OPS|2023-10|Best Offer(ベストオファー)の運用注意は？|Best Offerは説明を読まない質の低いバイヤーに当たりやすく理不尽返品が増える。掛ける商品を選び値引き率は低めに。出品数は150品程度キープしないと売れにくい傾向。
+SRC|2023-11|在庫単価を上げつつ回転も保つ商材は？|ニーズの高いCanon/NikonのAFレンズのラインナップを増やす。回転が落ちたら利益率を下げる意識で再出品するとeBay側で効果が出やすい。
+CS|2023-11|ポジティブ評価を増やすには？|バイヤーとのコミュニケーションを多めに取ると、ポジティブ評価に繋がりやすい。
+OPS|2023-11|出品速度のムラをなくすには？|代行への発送を月2回にすると出品にムラが出て販売が落ちる。週2回(月8回)ペースで発送し出品速度を平準化する。
+SRC|2023-10|ヤフオク仕入れのリサーチ歩留まりの目安は？|利益25%狙いのリサーチで落札率は数%(例:75件中2件、30件中1件)。多数リサーチして少数落札が前提なので件数をこなす。
+CHK|2025-02|MF/FDレンズの絞り・フォーカス検品を確実にするには？|シャッターが切れるだけのジャンクボディを1台持つ。レンズを装着してシャッターを切れば絞り羽の動きを、ファインダーで無限遠フォーカスが合うかを確認できる。
+CHK|2025-02|シャッター幕に凹みがある個体の扱いは？|シャッター幕の凹みは検品項目。Near Mintなら説明文に凹みを記載、またはグレードをExc+5に落として出品する。
+CHK|2025-03|Contax AXの空検品で「シャッターが切れない/00点滅」は？|ボディだけでは裏蓋を開けないとシャッターが動作しない(閉だとミラーが前後するのみ)。00点滅は裏蓋を開閉すれば直る仕様。レンズを付ければ正常動作。
+SRC|2025-03|リサーチでレンズを除外しカメラ本体だけ検索するコツは？|「Nikon Df -mm」のように-mmを付けるとレンズが除外され効率が上がる(デジカメ/中判/大判で有効、フィルムでは不可)。
+FIX|2025-11|Canon Aシリーズのシャッター鳴きの出品対応は？|「キュイーン」という持病。動画を付けて"shutter noise あり"で出品すればグレードは大きく下げなくてもよい。簡易対処は一時的でいずれ再発する。
+CHK|2025-04|Pentax 6×7(バケペン)の露出計の動かし方は？|上部のオン/オフツマミをオンにすれば作動する(フィルム装填は不要)。動かなければ電池・接点を確認。
+CHK|2025-05|Nikon FM3Aで「A」にするとシャッターが切れずミラーアップするのは？|電池消耗の可能性が高い(FM3Aは電子/機械ハイブリッド)。新品電池で再確認。機械制御のSSは電池切れでも切れる。
+CHK|2025-05|Hasselbladレンズ単体でシャッターが切れないときは？|稀に、レンズ単体では切れずボディに装着すると切れる個体がある。ボディで検証できなければ返品が無難。
+CHK|2025-06|Nikon F4/F-100でAF時にピントが合わずシャッターが切れないのは？|レンズが正常ならボディ側の故障(レンズを付けないと分からない)。電子シャッター系で修理困難。ファインダーだけバラ売り、またはヤフオクでジャンク流し(シャッターは切れる)。
+FIX|2025-07|古いカメラのグリップ/ラバーのベタつきの対処は？|sticker removerを使い(直後は増すが)silicon sprayを掛けるとベタつきが取れる。検品で気づいたら説明文に必ず記載する。
+CHK|2025-07|ブロニカ(Bronica)の検品/発送前の注意は？|シャッタートラブルや輸送で壊れることが多い。代行へ送る前にたくさんシャッターを切って動作を安定確認する。
+CHK|2025-10|Canon EOSのシャッターカウントを調べる方法は？|WindowsはUSB接続で「Canon EOS Digital Info」で読める。ただし5D Mark IV等は非対応で、Macの有料「ShutterCount」でないと分からない機種もある。
+CHK|2025-11|Ricoh GR1s等の検品で見る点は？|液晶が壊れやすい個体が多い。フィルムカウンターはフィルムを入れないと表示されない(未装填で非表示は正常なことも)。
+CHK|2025-11|Leica M6のシャッター幕が少しヨレて見えるのは？|シャッター幕に反射材がプリントされているため多少ヨレる。仕様の範囲で問題ないことが多い。
+CHK|2025-12|Nikon D3400等でレンズのAFが動かない/「非対応」表示は？|D3400等はボディ内AFモーター非搭載。スクリュー駆動(AF-D等)レンズはAFが使えない(故障ではない)。CanonのKissでSIGMAがエラー99なら相性かAF故障。
+CHK|2026-05|バルナック型Canonの型番(IV型等)の見分け方は？|IV型はシャッタースピード1/1000がある(500までしかなければIVではない)。キヤノンカメラミュージアムの一覧で確認。
+CHK|2026-05|Nikon F4で絞りが正しく絞られず露出オーバーになる症状は？|絞り連動レバーが下まで下がらなくなる持病(F4特有)。ポジでは命取り。シャッター速度1秒で切ると一目瞭然に確認できる。
+CHK|2026-06|Contax T2で持病以外に検品すべき点は？|ポンピング(ガクガク)持病に加え巻き上げ不良も多い。フィルムを入れてのテストが必須になってきた機種。
+CHK|2025-02|大判レンズのCopalシャッターの0/1はどう見分ける？|レンズシャッター上の「Copal」の横に0/1の表記がある(Copal0.0/Copal0.1等)。落札履歴も参照する。
+CS|2025-09|フィルムカメラ初心者バイヤーが「ファインダーが機能しない」と言うときは？|SLRはミラーアップ中はファインダーが真っ暗になる。50年以上前の機種はファインダー腐食も多い。まず初心者か確認し、レンズ装着や仕組みを丁寧に説明する。
+OPS|2023-10|綺麗なボディに曇ったレンズを付けて出品してよい？|ダメ。曇り等のあるレンズを付けるとセット全体のグレードが下に引っ張られる。綺麗なボディはボディ単体で出品した方が高く売れる。
+CS|2023-10|電池の入手性を心配するバイヤーへの返し方は？|「アダプターホルダー付属でLR44を4個入れればすぐ使える」等、代替電池の具体案を即返信すると安心して購入・好印象に繋がる。
+MKT|2023-10|失敗仕入れ(高掴み・訳あり品)はどうする？|薄利でも早く捌く方が後々良い。抱えるほど資金と回転を圧迫する。売れている人ほど損切りが速い。
+OPS|2023-11|高単価狙いと小物、どちらを重視すべき？|高単価ばかり狙いがちだが、実売の主役は$1000以下の小物の積み上げ。小物と高額のバランスを取るのが安定する。
+OPS|2023-11|eBayと国内(メルカリ/ヤフオク)を併売するときの注意は？|同時に売れることはほぼないが、万一はeBay優先。国内出品の説明文に「他サイトにも出品しています」と一言入れておく。
+MKT|2023-12|eBay輸出と為替の付き合い方は？|資産を円だけで持たず米ドルベースで考える。短期予測は困難だが世界の政治・経済で長期トレンドは掴める。円安局面は輸出の追い風。
+OPS|2024-01|eBayカメラ物販の採算ラインの目安は？|最低でも月5万円の利益がないと経費倒れになりやすい。目標は月10万円の利益。消費税還付も収益の一部に数える。
+OPS|2023-10|eBayのトラフィック(Impressions/Page views)はどこで見る？|アプリは見づらい。スマホでもブラウザ版(Chrome等)でPCと同じ画面でトラフィックやリサーチができ使いやすい。
+CS|2023-04|評価を積極的に増やすフォロー方法は？|発送時に到着予定日を伝え、配達完了後に「届いたか＋評価のお願い」を送ると評価が溜まりやすい(送りっぱより手厚い運用)。
+OPS|2023-10|代行(オークレボ等)への納品指示のコツは？|CSV一括はブラウザ相性で失敗しやすい。商品名・管理番号を1個ずつ貼り付けが確実。仕入価格も入れておくと棚卸に便利。
+SRC|2023-10|リサイクルショップ/ハードオフを覗く価値は？|埃だらけの安値品に掘り出しがある(例:1,100円のContax T2が動作品だった)。年数回でも当たれば大きい。ついでに覗く習慣を。
+FIX|2023-10|カビ痕・コーティング劣化レンズをダメ元で綺麗にする手順は？|カニ目でレンズを取り出し、アセトンに数日浸けてコーティングをふやかし、ジフを1滴+綿棒でゴシゴシ。剥がれることがある(ダメ元、効果なくても悪化はしない)。
+FIX|2024-04|Canon白レンズの塗装ハゲの補修方法は？|「キヤノン白レンズ補修塗料タッチペン」とラッカーうすめ液(ペイントうすめ液はNG)で2度塗り。材料約$12・10分程度で補修できる。
+FIX|2024-08|ラバー/フードの加水分解ベタベタの落とし方は？|強アルカリ電解水クリーナー「ブリーズクリア」が有効。加水分解汚れがスベスベになる。強アルカリなのでゴム手袋必須、肌に注意。
+FIX|2025-01|カメラ/レンズ外装の清掃・仕上げの定番手順は？|手垢・皮脂はマジックリンを歯ブラシで泡立て全体洗い→硬く絞った布で洗剤拭き取り→カラ拭き→アーマーオールで艶出し。塗装ハゲはガンダムブラック等を綿棒で少しずつ(べた塗りは逆に目立つ)。
+CS|2025-01|ライトシール(モルト)劣化の個体の売り方は？|いずれ交換が必要な旨を伝え、「$10サービスします」等と一言添えて売ると納得を得やすい。モルト交換済みなら説明文に明記する。
+CHK|2024-08|M型Leicaの製造年・色(後塗りか純正か)を調べるには？|シリアルから製造年・製造数・カラーが分かる一覧サイトがある。後塗りブラックか純正かの判別の参考になる(確定データではないので他資料も併用)。
+CS|2024-05|修理屋が少ない国のバイヤーの不具合対応は？|写真を送ってもらいながらリモートで対処(接点磨き等)を指示すると直ることがある。原因特定後、修理して使うか返品かをバイヤーに選んでもらう。
+CHK|2025-01|Leicaの赤バッジ(赤ポチ)の真贋・貼り替えの注意は？|接着剤で付いており偽物の後付けもある。無理に剥がすと跡が残るので高額個体では慎重に。真贋は仕入れ時に確認する。
+SHIP|2023-12|輸送破損のクレームが来たときの手順は？|①商品②段ボール③緩衝材の写真をもらい、代行(オークレボ等)と相談。代行が配送会社と交渉する。箱がボコボコなら補償の可能性。署名配送でも保険は別で、補償は代行↔配送会社の交渉次第。
+SHIP|2024-07|EMSとクーリエ(FedEx/DHL)の料金体系の違いは？|EMSは重量で料金が決まり、クーリエは容積(3辺サイズ)も効く。オセアニア等はEMSの方が安いことがある。軽くて小さい物はEMSが有利。
+SHIP|2023-09|クーリエ送料の目安と値付けは？|0.5kg・3辺60cmで欧州/米国向けはおおよそ¥3,200〜3,600(平均¥3,500想定)。送料を織り込んで値付けする。
+SHIP|2024-05|関税不払い/受取拒否品の強制返送で注意することは？|強制返送品は専用倉庫に集められ荷物があふれており、紛失が起きることがある(補償された例あり)。だから受取拒否を招くバイヤー対応は早めに。
+CHK|2025-05|Takumar(タクマー)レンズのアトムレンズ(トリウム)の見分け方と対応は？|黄変していればアトムレンズ(トリウム使用)。UVライトを当てると黄変は消える。放射能を気にするバイヤーには健康を害さないと説明、気にするなら勧めない。名板シリアルは分解個体が多くあてにならない。
+FIX|2026-02|フォーカスリングのゴムの白化はどう処理する？|ゴム保護剤(アーマーオール等)を絵筆で少量、薄く塗ると黒く復活する。塗りすぎない。白化は清掃で戻ることが多い。
+FIX|2026-01|レンズ・カメラの油性マジックや塗料汚れの落とし方は？|弱い溶剤から徐々に。まずエタノールで拭き、残ればアセトン(除光液)やシンナー系。ただし下地塗装も薄くなるので優しく、いきなり強い溶剤を使わない。
+FIX|2025-06|絞り羽が固着したレンズは触れば動く？|動かない。レンズ内の油が固まっているだけで、溶剤で洗浄しないと羽根は出てこない。無理に触らず洗浄(または修理)する。
+CHK|2026-03|AFレンズの検品でAF鳴き/引っかかりを見抜くには？|ぱっと見AFが動いても途中で引っかかる個体が多い。手でヘリコイドを端から端まで回し、引っかかる箇所がないか確認する。
+SRC|2026-02|部品欠品(電池蓋など)のカメラは仕入れる価値ある？|あり。電池蓋等はAliExpress等で純正色・高品質の社外部品が手に入り、欠品品を安く仕入れて補完できる。品質次第で社外品と記載不要なことも。
+CHK|2026-05|Contax T2を売るときの心構え(故障率)は？|故障確率が高い機種。発送前が正常でも輸送振動・寿命でいつ不具合が出てもおかしくない。修理は日本で4〜5万円、USはさらに高いので、返品より関税分等の一部返金で着地させることが多い。
+SHIP|2025-12|署名配送(サインOP)を付ける基準は？|$750以上の商品が目安(payment dispute対策)。保険は発生確率が低く不要という考え方もある(個人判断)。
+OPS|2025-10|eBayタイトルの「CLA'd」とは？表記の注意は？|CLA=整備済/オーバーホール済の意味。専門店でOH済でなければ表記しない方がよい(後でトラブルの元)。バイヤーが何を求めているかは確認する。
+CHK|2026-02|フィルムカウンターが戻らない/動かない個体の扱いは？|裏蓋を開ければ基本S/0に戻るのが正常。戻らないのはグリス固着かギア破損。不動でも売れるがコンディションは下げ、説明明記のうえタイトルはApp MINT等にする。
+CS|2026-07|発送先と異なる住所から返品が来たときは？|出荷前と同じ状態で返送されれば受け入れて再出品する(クモリ/擦り傷を記載)。eBay仲介はチャットボットにcontact ebayと送るとリンクが得られる。`.trim();
+const CATLAB={FIX:"故障・対処",MISS:"故障でない",CHK:"チェック",SELL:"売れ筋",MKT:"相場・戦略",CS:"顧客対応",SRC:"仕入れ",OPS:"出品・運用",SHIP:"発送・梱包"};
+const INT={1:1,2:3,3:7,4:16,5:35};
+const mem={};
+const store={
+  async get(k){try{if(!window.storage)return mem[k]??null;const r=await window.storage.get(k);return r?r.value:null;}catch(e){return mem[k]??null;}},
+  async set(k,v){mem[k]=v;try{if(window.storage)await window.storage.set(k,v);}catch(e){}}
+};
+const today=()=>new Date().toISOString().slice(0,10);
+const addDays=(d,n)=>{const t=new Date(d+"T00:00:00");t.setDate(t.getDate()+n);return t.toISOString().slice(0,10);};
+const hash=s=>{let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;return (h>>>0).toString(36);};
+const catLabel=c=>CATLAB[c]||c||"";
+
+let decks=[],progress={},cur=null,queue=[],phase="q";
+
+/* ---- CSV/TSV parse ---- */
+function parseTable(text){
+  const lines=text.replace(/\r/g,"").split("\n").filter(l=>l.trim().length);
+  const rows=lines.map(line=>{
+    if(line.indexOf("\t")>=0)return line.split("\t");
+    const out=[];let cur="",q=false;
+    for(let i=0;i<line.length;i++){const ch=line[i];
+      if(ch==='"'){if(q&&line[i+1]==='"'){cur+='"';i++;}else q=!q;}
+      else if(ch===","&&!q){out.push(cur);cur="";}else cur+=ch;}
+    out.push(cur);return out;
+  }).map(r=>r.map(c=>c.trim()));
+  // ヘッダ行を除去
+  if(rows.length&&rows[0].some(c=>/問題|答え|ジャンル|question|answer|category|カテゴリ/i.test(c)))rows.shift();
+  return rows;
+}
+function rowsToDecks(rows,fallbackName){
+  const map={};
+  rows.forEach(r=>{
+    let genre,q,a,cat,date="";
+    if(r.length>=3){genre=r[0]||fallbackName||"デッキ";q=r[1];a=r[2];cat=r[3]||"";date=r[4]||"";}
+    else if(r.length===2){genre=fallbackName||"デッキ";q=r[0];a=r[1];cat="";}
+    else return;
+    if(!q||!a)return;
+    (map[genre]=map[genre]||[]).push({q,a,cat,date});
+  });
+  return map;
+}
+function makeDeck(name,items,source,url){
+  return {id:hash(name)+"_"+Date.now().toString(36).slice(-4),name,source,url:url||"",
+    cards:items.map(it=>({id:hash(name+"\u0001"+it.q),q:it.q,a:it.a,cat:it.cat,date:it.date||""}))};
+}
+
+/* ---- persistence ---- */
+async function loadAll(){
+  try{const d=await store.get("decks_v3");if(d)decks=JSON.parse(d);}catch(e){}
+  try{const p=await store.get("progress_v3");if(p)progress=JSON.parse(p);}catch(e){}
+  if(!decks.length){
+    const rows=BUILTIN.split("\n").map(l=>l.split("|")).map(p=>({cat:p[0],date:p[1],q:p[2],a:p.slice(3).join("|")}));
+    decks=[makeDeck("カメラ転売",rows,"builtin")];
+    await saveDecks();
+  }
+  renderHome();
+  autoSyncAll();
+}
+/* 起動時：URL登録デッキを静かに最新化（失敗は無視） */
+async function autoSyncAll(){
+  const urlDecks=decks.filter(d=>d.source==="url"&&d.url);
+  if(!urlDecks.length)return;
+  let changed=false;
+  for(const dk of urlDecks){
+    try{
+      const text=await fetchCSV(dk.url);
+      const map=rowsToDecks(parseTable(text),dk.name);
+      const items=map[dk.name]||Object.values(map)[0]||[];
+      if(items.length){
+        dk.cards=items.map(it=>({id:hash(dk.name+"\u0001"+it.q),q:it.q,a:it.a,cat:it.cat,date:it.date||""}));
+        changed=true;
+      }
+    }catch(e){/* オフライン等は無視 */}
+  }
+  if(changed){await saveDecks();renderHome();}
+}
+async function saveDecks(){await store.set("decks_v3",JSON.stringify(decks));}
+async function saveProgress(){await store.set("progress_v3",JSON.stringify(progress));}
+const st=id=>progress[id]||{box:1,due:today(),new:true};
+
+/* ---- home ---- */
+function deckStats(dk){const t=today();let due=0,done=0;
+  dk.cards.forEach(c=>{const s=st(c.id);if(s.due<=t)due++;if(s.box>=4)done++;});return {due,done,total:dk.cards.length};}
+function renderHome(){
+  const list=document.getElementById("deck-list");list.innerHTML="";
+  let grand=0;
+  decks.forEach(dk=>{
+    const s=deckStats(dk);grand+=s.total;
+    const el=document.createElement("div");el.className="deck";
+    el.innerHTML=`<div class="body"><div class="name"></div>
+      <div class="meta">今日 <b class="due">${s.due}</b> ・ 習得 <b class="done">${s.done}</b> ・ 全 ${s.total}</div></div>
+      <button class="tool" data-act="del">削除</button>
+      ${dk.source==="url"?'<button class="tool" data-act="sync">更新</button>':''}
+      <span class="go">›</span>`;
+    el.querySelector(".name").textContent=dk.name;
+    el.onclick=e=>{const b=e.target.closest(".tool");
+      if(b){e.stopPropagation();b.dataset.act==="del"?delDeck(dk):syncDeck(dk);return;}
+      openStudy(dk);};
+    list.appendChild(el);
+  });
+  document.getElementById("home-total").innerHTML=`全 <b>${grand}</b> 枚`;
+}
+async function delDeck(dk){if(!confirm(dk.name+" を削除しますか？"))return;
+  decks=decks.filter(d=>d.id!==dk.id);await saveDecks();renderHome();}
+
+/* ---- study ---- */
+function openStudy(dk,cram){
+  cur=dk;document.getElementById("s-name").textContent=dk.name;
+  const t=today();
+  let pool=dk.cards.filter(c=>cram||st(c.id).due<=t);
+  for(let i=pool.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[pool[i],pool[j]]=[pool[j],pool[i]];}
+  queue=pool.map(c=>c.id);
+  show("study");next();
+}
+function refreshLeft(){document.getElementById("s-left").textContent=queue.length;}
+function next(){
+  phase="q";
+  document.getElementById("c-a").classList.add("hidden");
+  document.getElementById("c-hint").classList.remove("hidden");
+  document.getElementById("reveal").classList.remove("hidden");
+  document.getElementById("grade").classList.add("hidden");
+  refreshLeft();
+  if(!queue.length){
+    document.getElementById("card").classList.add("hidden");
+    document.getElementById("empty").classList.remove("hidden");
+    document.getElementById("bar").classList.add("hidden");
+    return;
+  }
+  document.getElementById("card").classList.remove("hidden");
+  document.getElementById("empty").classList.add("hidden");
+  document.getElementById("bar").classList.remove("hidden");
+  cur._card=cur.cards.find(c=>c.id===queue[0]);
+  const c=cur._card,s=st(c.id);
+  document.getElementById("c-cat").textContent=(catLabel(c.cat)||cur.name)+(c.date?" ・ "+c.date+"時点":"");
+  document.getElementById("s-cat").textContent=(catLabel(c.cat)||cur.name)+(c.date?" ・ "+c.date:"");
+  document.getElementById("c-box").textContent=s.box;
+  document.getElementById("c-q").textContent=c.q;
+  document.getElementById("c-a").textContent=c.a;
+}
+function reveal(){
+  if(phase!=="q"||!queue.length)return;
+  phase="a";
+  document.getElementById("c-a").classList.remove("hidden");
+  document.getElementById("c-hint").classList.add("hidden");
+  document.getElementById("reveal").classList.add("hidden");
+  document.getElementById("grade").classList.remove("hidden");
+}
+function grade(ok){
+  if(phase!=="a"||!cur._card)return;
+  const c=cur._card,s={...st(c.id)};delete s.new;
+  if(ok){s.box=Math.min(5,s.box+1);s.due=addDays(today(),INT[s.box]);queue.shift();}
+  else{s.box=1;s.due=today();queue.push(queue.shift());}
+  progress[c.id]=s;saveProgress();next();
+}
+
+/* ---- add / sync decks ---- */
+let addMode="paste";
+function openModal(o){document.getElementById("modal").classList.toggle("open",o);
+  document.getElementById("d-msg").textContent="";}
+async function addDeck(){
+  const name=document.getElementById("d-name").value.trim();
+  const msg=document.getElementById("d-msg");msg.className="msg";msg.textContent="";
+  try{
+    let text;
+    if(addMode==="url"){
+      const url=document.getElementById("d-url").value.trim();
+      if(!url){msg.className="msg err";msg.textContent="URLを入力してください";return;}
+      msg.textContent="読み込み中…";
+      text=await fetchCSV(url);
+    }else{
+      text=document.getElementById("d-paste").value.trim();
+      if(!text){msg.className="msg err";msg.textContent="貼り付けが空です";return;}
+    }
+    const map=rowsToDecks(parseTable(text),name);
+    const names=Object.keys(map);
+    if(!names.length){msg.className="msg err";msg.textContent="問題・答えの2列以上が必要です";return;}
+    let added=0;
+    names.forEach(nm=>{
+      const dk=makeDeck(nm,map[nm],addMode==="url"?"url":"paste",addMode==="url"?document.getElementById("d-url").value.trim():"");
+      const ex=decks.findIndex(d=>d.name===nm);
+      if(ex>=0)decks[ex]=dk;else decks.push(dk);
+      added+=dk.cards.length;
+    });
+    await saveDecks();renderHome();
+    msg.className="msg";msg.textContent=names.length+"デッキ / "+added+"枚を反映しました";
+    setTimeout(()=>openModal(false),700);
+  }catch(e){msg.className="msg err";
+    msg.textContent="読み込み失敗。URL方式はGoogleで『ウェブに公開→CSV』にしてください。貼り付け方式なら確実です。";}
+}
+/* 公開CSV取得: まず直接、ダメなら公開データ用の中継。HTMLエラーページは弾く */
+async function fetchCSV(url){
+  const looksCSV=t=>t&&t.trim().length>0&&t.trim()[0]!=="<";
+  try{const r=await fetch(url,{cache:"no-store"});if(r.ok){const t=await r.text();if(looksCSV(t))return t;}}catch(e){}
+  const proxies=[
+    u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u),
+    u=>"https://corsproxy.io/?url="+encodeURIComponent(u)
+  ];
+  for(const p of proxies){
+    try{const r=await fetch(p(url),{cache:"no-store"});if(r.ok){const t=await r.text();if(looksCSV(t))return t;}}catch(e){}
+  }
+  throw new Error("fetch failed");
+}
+async function syncDeck(dk){
+  if(!dk.url)return;
+  try{const text=await fetchCSV(dk.url);
+    const map=rowsToDecks(parseTable(text),dk.name);
+    const items=map[dk.name]||Object.values(map)[0]||[];
+    dk.cards=items.map(it=>({id:hash(dk.name+"\u0001"+it.q),q:it.q,a:it.a,cat:it.cat,date:it.date||""}));
+    await saveDecks();renderHome();alert(dk.name+" を更新しました（"+dk.cards.length+"枚）");
+  }catch(e){alert("更新失敗。『ウェブに公開→CSV』のURLか確認してください。");}
+}
+
+/* ---- nav ---- */
+function show(id){document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");}
+
+/* ---- wire ---- */
+document.getElementById("stage").addEventListener("click",e=>{if(!e.target.closest("button"))reveal();});
+document.getElementById("reveal").onclick=e=>{e.stopPropagation();reveal();};
+document.getElementById("ng").onclick=e=>{e.stopPropagation();grade(false);};
+document.getElementById("ok").onclick=e=>{e.stopPropagation();grade(true);};
+document.getElementById("s-back").onclick=()=>{show("home");renderHome();};
+document.getElementById("cram").onclick=()=>openStudy(cur,true);
+document.getElementById("add-deck").onclick=()=>{document.getElementById("d-name").value="";
+  document.getElementById("d-paste").value="";document.getElementById("d-url").value="";openModal(true);};
+document.getElementById("d-cancel").onclick=()=>openModal(false);
+document.getElementById("d-add").onclick=addDeck;
+document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{
+  addMode=b.dataset.m;document.querySelectorAll(".seg button").forEach(x=>x.setAttribute("aria-pressed",x===b));
+  document.getElementById("paste-field").classList.toggle("hidden",addMode!=="paste");
+  document.getElementById("url-field").classList.toggle("hidden",addMode!=="url");});
+document.getElementById("modal").addEventListener("click",e=>{if(e.target.id==="modal")openModal(false);});
+document.addEventListener("keydown",e=>{
+  if(document.getElementById("modal").classList.contains("open"))return;
+  if(!document.getElementById("study").classList.contains("active"))return;
+  if(phase==="q"&&(e.key===" "||e.key==="Enter")){e.preventDefault();reveal();}
+  else if(phase==="a"){
+    if(e.key==="ArrowLeft"||e.key==="1"||e.key.toLowerCase()==="n")grade(false);
+    else if(e.key==="ArrowRight"||e.key==="2"||e.key==="Enter"||e.key===" "||e.key.toLowerCase()==="o")grade(true);}
+});
+loadAll();
+</script></body></html>
