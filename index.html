@@ -40,6 +40,20 @@
   .synbtn{flex:1;padding:9px;border:1px solid var(--edge);border-radius:10px;background:transparent;
     color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer}
   .synbtn:hover{color:var(--cream);border-color:var(--amber)}
+  .homebar{padding:12px 16px 0;display:flex;flex-direction:column;gap:9px}
+  .homebar input{width:100%;padding:11px 13px;border:1px solid var(--edge);border-radius:12px;background:var(--panel);color:var(--cream);font-family:var(--sans);font-size:13px;outline:none}
+  .homebar input:focus{border-color:var(--amber)}
+  .goalrow{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+  .mini2{padding:4px 10px;border:1px solid var(--edge);border-radius:8px;background:transparent;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer}
+  .mini2:hover{color:var(--amber);border-color:var(--amber)}
+  .sresults{padding:6px 16px 0;max-height:44vh;overflow:auto}
+  .sresult{padding:10px 12px;border:1px solid var(--edge);border-radius:10px;margin-bottom:6px;font-size:12px;line-height:1.55}
+  .sresult .sq{color:var(--cream);font-weight:700}
+  .sresult .sa{color:var(--muted);margin-top:3px}
+  .sresult .sd{color:var(--amber);font-size:10px;margin-top:4px}
+  .filters{display:flex;gap:6px;overflow-x:auto;padding:10px 16px 2px;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
+  .chip{white-space:nowrap;padding:6px 12px;border:1px solid var(--edge);border-radius:999px;background:transparent;color:var(--muted);font-size:11.5px;font-weight:700;cursor:pointer;flex:0 0 auto}
+  .chip[aria-pressed="true"]{color:#241f17;background:var(--amber);border-color:var(--amber)}
   .hometip{font-size:11.5px;color:var(--muted);line-height:1.7;padding:14px 18px 20px}
   .hometip code{font-family:var(--mono);color:var(--amber)}
   /* study card */
@@ -108,6 +122,11 @@
     <div><h1>Field Notebook</h1><div class="jp">単語帳・間隔反復</div></div>
     <div class="right" id="home-total"></div>
   </header>
+  <div class="homebar">
+    <input id="search" type="text" placeholder="🔍 カードを検索（問題・答え）" autocomplete="off">
+    <div class="goalrow">1日の目標 <b id="goal-val">40</b> 枚 <button class="mini2" id="goal-edit">変更</button></div>
+  </div>
+  <div class="sresults hidden" id="search-results"></div>
   <div class="list" id="deck-list"></div>
   <div style="padding:0 16px"><button class="addbtn" id="add-deck">＋ デッキを追加</button></div>
   <div style="padding:10px 16px 0;display:flex;gap:10px;align-items:center">
@@ -122,8 +141,9 @@
   <header>
     <button class="back" id="s-back">‹</button>
     <div><h1 id="s-name">DECK</h1><div class="jp" id="s-cat">—</div></div>
-    <div class="right">残り <b id="s-left">0</b></div>
+    <div class="right"><button class="mini2" id="rev-toggle">通常</button> 残り <b id="s-left">0</b></div>
   </header>
+  <div class="filters" id="filters"></div>
   <div class="stage" id="stage">
     <div class="card" id="card">
       <div class="databar"><span class="cat" id="c-cat">—</span><span>BOX <i id="c-box">1</i></span></div>
@@ -397,6 +417,9 @@ const hash=s=>{let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;ret
 const catLabel=c=>CATLAB[c]||c||"";
 
 let decks=[],progress={},cur=null,queue=[],phase="q";
+let reverseMode=false,curFilter="__all",curCram=false;
+let dailyGoal=40,daily={date:"",counts:{}},decksT=0;
+const esc=s=>String(s).replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m]));
 
 /* ---- CSV/TSV parse ---- */
 function parseTable(text){
@@ -434,6 +457,10 @@ function makeDeck(name,items,source,url){
 async function loadAll(){
   try{const d=await store.get("decks_v3");if(d)decks=JSON.parse(d);}catch(e){}
   try{const p=await store.get("progress_v3");if(p)progress=JSON.parse(p);}catch(e){}
+  try{const g=await store.get("dailyGoal_v1");if(g)dailyGoal=parseInt(g,10)||40;}catch(e){}
+  try{const dd=await store.get("daily_v1");if(dd)daily=JSON.parse(dd);}catch(e){}
+  if(daily.date!==today()){daily={date:today(),counts:{}};await store.set("daily_v1",JSON.stringify(daily));}
+  try{const dt=await store.get("decksT_v1");decksT=dt?parseInt(dt,10):0;}catch(e){decksT=0;}
   if(!decks.length){
     const rows=BUILTIN.split("\n").map(l=>l.split("|")).map(p=>({cat:p[0],date:p[1],q:p[2],a:p.slice(3).join("|")}));
     decks=[makeDeck("カメラ転売",rows,"builtin")];
@@ -459,7 +486,7 @@ async function autoSyncAll(){
       }
     }catch(e){/* オフライン等は無視 */}
   }
-  if(changed){await saveDecks();renderHome();}
+  if(changed){await decksChanged();renderHome();}
 }
 async function saveDecks(){await store.set("decks_v3",JSON.stringify(decks));}
 async function saveProgress(){await store.set("progress_v3",JSON.stringify(progress));}
@@ -486,18 +513,41 @@ function renderHome(){
     list.appendChild(el);
   });
   document.getElementById("home-total").innerHTML=`全 <b>${grand}</b> 枚`;
+  const gv=document.getElementById("goal-val");if(gv)gv.textContent=dailyGoal;
 }
 async function delDeck(dk){if(!confirm(dk.name+" を削除しますか？"))return;
-  decks=decks.filter(d=>d.id!==dk.id);await saveDecks();renderHome();}
+  decks=decks.filter(d=>d.id!==dk.id);await decksChanged();renderHome();}
 
 /* ---- study ---- */
 function openStudy(dk,cram){
-  cur=dk;document.getElementById("s-name").textContent=dk.name;
-  const t=today();
-  let pool=dk.cards.filter(c=>cram||st(c.id).due<=t);
-  for(let i=pool.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[pool[i],pool[j]]=[pool[j],pool[i]];}
-  queue=pool.map(c=>c.id);
+  cur=dk;curCram=!!cram;curFilter="__all";
+  document.getElementById("s-name").textContent=dk.name;
+  renderFilters(dk);
+  buildQueue();
   show("study");next();
+}
+function catOf(c){return catLabel(c.cat)||"その他";}
+function renderFilters(dk){
+  const t=today();const counts={};
+  dk.cards.forEach(c=>{const s=st(c.id);if(curCram||s.due<=t){const k=catOf(c);counts[k]=(counts[k]||0)+1;}});
+  const total=Object.values(counts).reduce((a,b)=>a+b,0);
+  const wrap=document.getElementById("filters");wrap.innerHTML="";
+  const mk=(key,label,n)=>{const b=document.createElement("button");b.className="chip";
+    b.textContent=label+" "+n;b.setAttribute("aria-pressed",curFilter===key);
+    b.onclick=()=>{curFilter=key;renderFilters(dk);buildQueue();next();};wrap.appendChild(b);};
+  mk("__all","すべて",total);
+  Object.keys(counts).sort((a,b)=>counts[b]-counts[a]).forEach(k=>mk(k,k,counts[k]));
+}
+function buildQueue(){
+  const t=today();
+  let pool=cur.cards.filter(c=>{
+    const s=st(c.id);if(!(curCram||s.due<=t))return false;
+    if(curFilter!=="__all"&&catOf(c)!==curFilter)return false;
+    return true;
+  });
+  for(let i=pool.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[pool[i],pool[j]]=[pool[j],pool[i]];}
+  if(!curCram){const done=daily.counts[cur.id]||0;pool=pool.slice(0,Math.max(0,dailyGoal-done));}
+  queue=pool.map(c=>c.id);
 }
 function refreshLeft(){document.getElementById("s-left").textContent=queue.length;}
 function next(){
@@ -511,6 +561,12 @@ function next(){
     document.getElementById("card").classList.add("hidden");
     document.getElementById("empty").classList.remove("hidden");
     document.getElementById("bar").classList.add("hidden");
+    const done=daily.counts[cur.id]||0;
+    const reached=!curCram&&done>=dailyGoal;
+    document.querySelector("#empty h2").textContent=reached?"今日の目標達成 🎯":"今日の分は完了 🎞";
+    document.querySelector("#empty p").textContent=reached
+      ?`今日は ${done} 枚やりました（目標 ${dailyGoal} 枚）。`
+      :"このデッキで今日出す期限のカードはありません。";
     return;
   }
   document.getElementById("card").classList.remove("hidden");
@@ -518,11 +574,12 @@ function next(){
   document.getElementById("bar").classList.remove("hidden");
   cur._card=cur.cards.find(c=>c.id===queue[0]);
   const c=cur._card,s=st(c.id);
+  const showQ=reverseMode?c.a:c.q, showA=reverseMode?c.q:c.a;
   document.getElementById("c-cat").textContent=(catLabel(c.cat)||cur.name)+(c.date?" ・ "+c.date+"時点":"");
   document.getElementById("s-cat").textContent=(catLabel(c.cat)||cur.name)+(c.date?" ・ "+c.date:"");
   document.getElementById("c-box").textContent=s.box;
-  document.getElementById("c-q").textContent=c.q;
-  document.getElementById("c-a").textContent=c.a;
+  document.getElementById("c-q").textContent=showQ;
+  document.getElementById("c-a").textContent=showA;
 }
 function reveal(){
   if(phase!=="q"||!queue.length)return;
@@ -538,7 +595,11 @@ function grade(ok){
   s.t=Date.now();
   if(ok){s.box=Math.min(5,s.box+1);s.due=addDays(today(),INT[s.box]);queue.shift();}
   else{s.box=1;s.due=today();queue.push(queue.shift());}
-  progress[c.id]=s;saveProgress();scheduleCloudPush();next();
+  progress[c.id]=s;saveProgress();scheduleCloudPush();
+  if(daily.date!==today())daily={date:today(),counts:{}};
+  daily.counts[cur.id]=(daily.counts[cur.id]||0)+1;
+  store.set("daily_v1",JSON.stringify(daily));
+  next();
 }
 
 /* ---- add / sync decks ---- */
@@ -569,7 +630,7 @@ async function addDeck(){
       if(ex>=0)decks[ex]=dk;else decks.push(dk);
       added+=dk.cards.length;
     });
-    await saveDecks();renderHome();
+    await decksChanged();renderHome();
     msg.className="msg";msg.textContent=names.length+"デッキ / "+added+"枚を反映しました";
     setTimeout(()=>openModal(false),700);
   }catch(e){msg.className="msg err";
@@ -594,7 +655,7 @@ async function syncDeck(dk){
     const map=rowsToDecks(parseTable(text),dk.name);
     const items=map[dk.name]||Object.values(map)[0]||[];
     dk.cards=items.map(it=>({id:hash(dk.name+"\u0001"+it.q),q:it.q,a:it.a,cat:it.cat,date:it.date||""}));
-    await saveDecks();renderHome();alert(dk.name+" を更新しました（"+dk.cards.length+"枚）");
+    await decksChanged();renderHome();alert(dk.name+" を更新しました（"+dk.cards.length+"枚）");
   }catch(e){alert("更新失敗。『ウェブに公開→CSV』のURLか確認してください。");}
 }
 
@@ -609,6 +670,25 @@ document.getElementById("ng").onclick=e=>{e.stopPropagation();grade(false);};
 document.getElementById("ok").onclick=e=>{e.stopPropagation();grade(true);};
 document.getElementById("s-back").onclick=()=>{show("home");renderHome();};
 document.getElementById("cram").onclick=()=>openStudy(cur,true);
+document.getElementById("rev-toggle").onclick=()=>{reverseMode=!reverseMode;
+  document.getElementById("rev-toggle").textContent=reverseMode?"逆":"通常";next();};
+document.getElementById("goal-edit").onclick=async()=>{
+  const v=prompt("1日の目標枚数を入力",dailyGoal);
+  if(v===null)return;const n=Math.max(1,parseInt(v,10)||dailyGoal);
+  dailyGoal=n;await store.set("dailyGoal_v1",String(n));
+  document.getElementById("goal-val").textContent=n;
+};
+document.getElementById("search").oninput=e=>{
+  const q=e.target.value.trim().toLowerCase();const box=document.getElementById("search-results");
+  if(!q){box.classList.add("hidden");box.innerHTML="";return;}
+  const hits=[];
+  decks.forEach(dk=>dk.cards.forEach(c=>{
+    if((c.q+" "+c.a).toLowerCase().includes(q))hits.push({dk,c});
+  }));
+  const shown=hits.slice(0,50).map(h=>`<div class="sresult"><div class="sq">${esc(h.c.q)}</div><div class="sa">${esc(h.c.a)}</div><div class="sd">${esc(h.dk.name)}${h.c.cat?" ・ "+esc(catLabel(h.c.cat)):""}${h.c.date?" ・ "+esc(h.c.date):""}</div></div>`).join("");
+  box.innerHTML=(hits.length?`<div class="sd" style="padding:2px 2px 6px">${hits.length} 件`+(hits.length>50?"（上位50件表示）":"")+`</div>`:"")+(shown||'<div class="sresult">該当なし</div>');
+  box.classList.remove("hidden");
+};
 document.getElementById("add-deck").onclick=()=>{document.getElementById("d-name").value="";
   document.getElementById("d-paste").value="";document.getElementById("d-url").value="";openModal(true);};
 document.getElementById("d-cancel").onclick=()=>openModal(false);
@@ -629,26 +709,33 @@ function nowhm(){const d=new Date();return String(d.getHours()).padStart(2,"0")+
 function mergeInto(base,incoming){ // 各カード、tが新しい方を採用
   let n=0;for(const id in incoming){const a=base[id],b=incoming[id];
     if(!a||(((b&&b.t)||0)>((a&&a.t)||0))){base[id]=b;n++;}}return n;}
-async function cloudPull(){
-  const url=SB_URL+"/rest/v1/study_progress?id=eq."+encodeURIComponent(SYNC_ID)+"&select=data";
+async function cloudPull(rowid){
+  const url=SB_URL+"/rest/v1/study_progress?id=eq."+encodeURIComponent(rowid)+"&select=data";
   const r=await fetch(url,{headers:SB_HEAD,cache:"no-store"});
   if(!r.ok)throw new Error("pull "+r.status);
   const rows=await r.json();return (rows&&rows[0]&&rows[0].data)||null;
 }
-async function cloudPush(obj){
+async function cloudPush(rowid,obj){
   const url=SB_URL+"/rest/v1/study_progress?on_conflict=id";
-  const body=[{id:SYNC_ID,data:obj,updated_at:new Date().toISOString()}];
+  const body=[{id:rowid,data:obj,updated_at:new Date().toISOString()}];
   const r=await fetch(url,{method:"POST",headers:{...SB_HEAD,"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify(body)});
   if(!r.ok)throw new Error("push "+r.status);
 }
+async function pullDecks(){return await cloudPull(SYNC_ID+"_decks");}
+async function pushDecks(){try{await cloudPush(SYNC_ID+"_decks",{decks,t:decksT});}catch(e){}}
+async function decksChanged(){decksT=Date.now();await store.set("decksT_v1",String(decksT));await saveDecks();pushDecks();}
 let syncing=false,pushTimer=null;
 async function cloudSync(){
   if(syncing)return;syncing=true;setSyncStatus("同期中…");
   try{
-    const remote=await cloudPull();
+    const remote=await cloudPull(SYNC_ID);
     if(remote)mergeInto(progress,remote);
     await saveProgress();
-    await cloudPush(progress);
+    await cloudPush(SYNC_ID,progress);
+    // デッキ一覧の同期（最後に変更した端末を優先）
+    const rd=await pullDecks();
+    if(rd&&(rd.t||0)>(decksT||0)){decks=rd.decks||decks;decksT=rd.t;await saveDecks();await store.set("decksT_v1",String(decksT));}
+    else if(decks.length&&(decksT||0)>((rd&&rd.t)||0)){await pushDecks();}
     renderHome();
     setSyncStatus("☁ 同期済み "+nowhm());
   }catch(e){setSyncStatus("⚠ 同期できません（オフライン等）");}
@@ -657,7 +744,7 @@ async function cloudSync(){
 function scheduleCloudPush(){ // 採点のたびに呼ぶ→まとめて遅延送信
   clearTimeout(pushTimer);
   pushTimer=setTimeout(async()=>{
-    try{await cloudPush(progress);setSyncStatus("☁ 同期済み "+nowhm());}
+    try{await cloudPush(SYNC_ID,progress);setSyncStatus("☁ 同期済み "+nowhm());}
     catch(e){setSyncStatus("⚠ 未同期（次の同期で再送）");}
   },2000);
 }
