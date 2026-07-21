@@ -141,7 +141,7 @@
   <header>
     <button class="back" id="s-back">‹</button>
     <div><h1 id="s-name">DECK</h1><div class="jp" id="s-cat">—</div></div>
-    <div class="right"><button class="mini2" id="rev-toggle">通常</button> 残り <b id="s-left">0</b></div>
+    <div class="right"><button class="mini2" id="shuffle-btn">🔀 シャッフル</button> 残り <b id="s-left">0</b></div>
   </header>
   <div class="filters" id="filters"></div>
   <div class="stage" id="stage">
@@ -417,7 +417,7 @@ const hash=s=>{let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;ret
 const catLabel=c=>CATLAB[c]||c||"";
 
 let decks=[],progress={},cur=null,queue=[],phase="q";
-let reverseMode=false,curFilter="__all",curCram=false;
+let curFilter="__all",curCram=false;
 let dailyGoal=40,daily={date:"",counts:{}},decksT=0;
 const esc=s=>String(s).replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m]));
 
@@ -574,12 +574,11 @@ function next(){
   document.getElementById("bar").classList.remove("hidden");
   cur._card=cur.cards.find(c=>c.id===queue[0]);
   const c=cur._card,s=st(c.id);
-  const showQ=reverseMode?c.a:c.q, showA=reverseMode?c.q:c.a;
   document.getElementById("c-cat").textContent=(catLabel(c.cat)||cur.name)+(c.date?" ・ "+c.date+"時点":"");
   document.getElementById("s-cat").textContent=(catLabel(c.cat)||cur.name)+(c.date?" ・ "+c.date:"");
   document.getElementById("c-box").textContent=s.box;
-  document.getElementById("c-q").textContent=showQ;
-  document.getElementById("c-a").textContent=showA;
+  document.getElementById("c-q").textContent=c.q;
+  document.getElementById("c-a").textContent=c.a;
 }
 function reveal(){
   if(phase!=="q"||!queue.length)return;
@@ -670,8 +669,11 @@ document.getElementById("ng").onclick=e=>{e.stopPropagation();grade(false);};
 document.getElementById("ok").onclick=e=>{e.stopPropagation();grade(true);};
 document.getElementById("s-back").onclick=()=>{show("home");renderHome();};
 document.getElementById("cram").onclick=()=>openStudy(cur,true);
-document.getElementById("rev-toggle").onclick=()=>{reverseMode=!reverseMode;
-  document.getElementById("rev-toggle").textContent=reverseMode?"逆":"通常";next();};
+document.getElementById("shuffle-btn").onclick=()=>{
+  if(phase==="a")return; // 答え表示中は誤操作防止
+  for(let i=queue.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[queue[i],queue[j]]=[queue[j],queue[i]];}
+  next();
+};
 document.getElementById("goal-edit").onclick=async()=>{
   const v=prompt("1日の目標枚数を入力",dailyGoal);
   if(v===null)return;const n=Math.max(1,parseInt(v,10)||dailyGoal);
